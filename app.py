@@ -18,7 +18,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = (
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SQLALCHEMY_ECHO'] = False
-app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = True
+app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', "it's a secret")
 toolbar = DebugToolbarExtension(app)
 
@@ -115,7 +115,7 @@ def logout():
 
     # IMPLEMENT THIS
 
-    session.pop(CURR_USER_KEY)
+    do_logout()
     flash("Goodbye.", "success")
     return redirect("/login")
 
@@ -226,16 +226,19 @@ def profile():
         user.username = request.form["username"]
         user.email = request.form["email"]
         user.image_url = request.form["image_url"]
-        user.header.image_url = request.form["header_image_url"]
+        user.header_image_url = request.form["header_image_url"]
         user.bio = request.form["bio"]
         password = request.form["password"]
 
-        
+        if User.authenticate(user.username, password):
+            db.session.add(user)
+            db.session.commit()
+            flash("Profile updated.", "success")
 
-        db.session.add(user)
-        db.session.commit()
-
-        return redirect("/users/profile")
+            return redirect(f"/users/{g.user.id}")
+        else:
+            flash("Invalid password. Profile not updated", "danger")
+            return redirect(f"/users/{g.user.id}")
 
     return render_template("users/edit.html", form=form, user=user)
 
@@ -318,8 +321,17 @@ def homepage():
     """
 
     if g.user:
+
+        # import pdb
+        # pdb.set_trace()
+        following_ids = [user.id for user in g.user.following]
+        follower_ids = [user.id for user in g.user.followers]
+
+        print(following_ids)
+
         messages = (Message
                     .query
+                    .filter_by(Message.user_id in following_ids)
                     .order_by(Message.timestamp.desc())
                     .limit(100)
                     .all())
@@ -337,7 +349,7 @@ def homepage():
 #
 # https://stackoverflow.com/questions/34066804/disabling-caching-in-flask
 
-@app.after_request
+@ app.after_request
 def add_header(req):
     """Add non-caching headers on every request."""
 
