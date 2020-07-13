@@ -5,7 +5,7 @@ from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
 
 from forms import UserAddForm, UserEditForm, LoginForm, MessageForm
-from models import db, connect_db, User, Message
+from models import db, connect_db, User, Message, Likes
 
 CURR_USER_KEY = "curr_user"
 
@@ -17,7 +17,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = (
     os.environ.get('DATABASE_URL', 'postgres:///warbler'))
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ECHO'] = False
+app.config['SQLALCHEMY_ECHO'] = True
 app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', "it's a secret")
 toolbar = DebugToolbarExtension(app)
@@ -35,7 +35,7 @@ def add_user_to_g():
 
     if CURR_USER_KEY in session:
         g.user = User.query.get(session[CURR_USER_KEY])
-
+        # likes = g.user.likes
     else:
         g.user = None
 
@@ -146,8 +146,6 @@ def users_show(user_id):
 
     user = User.query.get_or_404(user_id)
 
-    # snagging messages in order from the database;
-    # user.messages won't be in order by default
     messages = (Message
                 .query
                 .filter(Message.user_id == user_id)
@@ -186,7 +184,7 @@ def add_follow(follow_id):
     """Add a follow for the currently-logged-in user."""
 
     if not g.user:
-        flash("Access unauthorized.", "danger")
+        flash("Unauthorized access.", "danger")
         return redirect("/")
 
     followed_user = User.query.get_or_404(follow_id)
@@ -209,6 +207,52 @@ def stop_following(follow_id):
     db.session.commit()
 
     return redirect(f"/users/{g.user.id}/following")
+
+
+# Likes routes
+
+@app.route('/users/add_like/<int:message_id>', methods=["POST"])
+def add_like(message_id):
+    """Add a like to a message."""
+
+    if not g.user:
+        flash("Unauthorized access.", "danger")
+        return redirect("/")
+
+    if Message.query.get(message_id).user.id == g.user.id:
+        flash("Cannot add likes for your own messages.", "warning")
+        return redirect("/")
+
+    if Likes.query.filter_by(message_id=message_id, user_id=g.user.id).first():
+        like = Likes.query.filter_by(
+            message_id=message_id, user_id=g.user.id).first()
+        db.session.delete(like)
+        db.session.commit()
+        flash("Unliked.", "info")
+
+        return redirect("/")
+
+    else:
+        # if Likes.query.
+        like = Likes(user_id=g.user.id, message_id=message_id)
+
+        db.session.add(like)
+        db.session.commit()
+        flash("Liked!", "success")
+
+        return redirect("/")
+
+
+@app.route('/users/<int:user_id>/likes')
+def users_likes(user_id):
+    """Show list of liked warbles for this user."""
+
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    user = User.query.get_or_404(user_id)
+    return render_template('users/likes.html', user=user)
 
 
 @app.route('/users/profile', methods=["GET", "POST"])
@@ -322,16 +366,12 @@ def homepage():
 
     if g.user:
 
-        # import pdb
-        # pdb.set_trace()
         following_ids = [user.id for user in g.user.following]
-        follower_ids = [user.id for user in g.user.followers]
-
-        print(following_ids)
+        following_ids.append(g.user.id)
 
         messages = (Message
                     .query
-                    .filter_by(Message.user_id in following_ids)
+                    .filter(Message.user_id.in_(following_ids))
                     .order_by(Message.timestamp.desc())
                     .limit(100)
                     .all())
