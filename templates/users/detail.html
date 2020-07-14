@@ -1,11 +1,13 @@
 {% extends 'base.html' %} {% block content %}
 
 <div id="warbler-hero" class="full-width">
-  <img
-    src="/static/images/warbler-hero.jpg"
-    alt="warbler-hero-image"
-    class="warbler-hero"
-  />
+  <div id="profile-hero">
+    <img
+      src="/static/images/warbler-hero.jpg"
+      alt="warbler-hero-image"
+      class="img-fluid"
+    />
+  </div>
 </div>
 <img
   src="{{ user.image_url }}"
