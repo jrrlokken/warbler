@@ -60,4 +60,11 @@ class UserModelTestCase(TestCase):
     def test_user_repr(self):
         """Does the repr method work?"""
 
-        print(User.query.first())
+        u = User(
+            email="test@test.com",
+            username="testuser",
+            password="HASHED_PASSWORD"
+        )
+
+        db.session.add(u)
+        db.session.commit()
