@@ -158,6 +158,11 @@ nav + .container {
   margin-top: 100px;
 }
 
+#profile-hero {
+  height: 43vh;
+  overflow: hidden;
+}
+
 #profile-image,
 #profile-avatar {
   border-radius: 100%;

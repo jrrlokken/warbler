@@ -1,4 +1,10 @@
+<<<<<<< HEAD
 *.pyc
 __pycache__
 venv/
 *.vscode
+=======
+.vscode
+venv/
+__pycache__
+>>>>>>> 85c60d4a809da402b6a4b3e27b300276a32e5542

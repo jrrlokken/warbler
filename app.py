@@ -4,8 +4,8 @@ from flask import Flask, render_template, request, flash, redirect, session, g
 from flask_debugtoolbar import DebugToolbarExtension
 from sqlalchemy.exc import IntegrityError
 
-from forms import UserAddForm, LoginForm, MessageForm
-from models import db, connect_db, User, Message
+from forms import UserAddForm, UserEditForm, LoginForm, MessageForm
+from models import db, connect_db, User, Message, Likes
 
 CURR_USER_KEY = "curr_user"
 
@@ -17,8 +17,8 @@ app.config['SQLALCHEMY_DATABASE_URI'] = (
     os.environ.get('DATABASE_URL', 'postgres:///warbler'))
 
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ECHO'] = False
-app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = True
+app.config['SQLALCHEMY_ECHO'] = True
+app.config['DEBUG_TB_INTERCEPT_REDIRECTS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', "it's a secret")
 toolbar = DebugToolbarExtension(app)
 
@@ -35,7 +35,7 @@ def add_user_to_g():
 
     if CURR_USER_KEY in session:
         g.user = User.query.get(session[CURR_USER_KEY])
-
+        # likes = g.user.likes
     else:
         g.user = None
 
@@ -115,6 +115,10 @@ def logout():
 
     # IMPLEMENT THIS
 
+    do_logout()
+    flash("Goodbye.", "success")
+    return redirect("/login")
+
 
 ##############################################################################
 # General user routes:
@@ -142,8 +146,6 @@ def users_show(user_id):
 
     user = User.query.get_or_404(user_id)
 
-    # snagging messages in order from the database;
-    # user.messages won't be in order by default
     messages = (Message
                 .query
                 .filter(Message.user_id == user_id)
@@ -182,7 +184,7 @@ def add_follow(follow_id):
     """Add a follow for the currently-logged-in user."""
 
     if not g.user:
-        flash("Access unauthorized.", "danger")
+        flash("Unauthorized access.", "danger")
         return redirect("/")
 
     followed_user = User.query.get_or_404(follow_id)
@@ -207,11 +209,82 @@ def stop_following(follow_id):
     return redirect(f"/users/{g.user.id}/following")
 
 
+# Likes routes
+
+@app.route('/users/add_like/<int:message_id>', methods=["POST"])
+def add_like(message_id):
+    """Add a like to a message."""
+
+    if not g.user:
+        flash("Unauthorized access.", "danger")
+        return redirect("/")
+
+    if Message.query.get(message_id).user.id == g.user.id:
+        flash("Cannot add likes for your own messages.", "warning")
+        return redirect("/")
+
+    if Likes.query.filter_by(message_id=message_id, user_id=g.user.id).first():
+        like = Likes.query.filter_by(
+            message_id=message_id, user_id=g.user.id).first()
+        db.session.delete(like)
+        db.session.commit()
+        flash("Unliked.", "info")
+
+        return redirect("/")
+
+    else:
+        # if Likes.query.
+        like = Likes(user_id=g.user.id, message_id=message_id)
+
+        db.session.add(like)
+        db.session.commit()
+        flash("Liked!", "success")
+
+        return redirect("/")
+
+
+@app.route('/users/<int:user_id>/likes')
+def users_likes(user_id):
+    """Show list of liked warbles for this user."""
+
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    user = User.query.get_or_404(user_id)
+    return render_template('users/likes.html', user=user)
+
+
 @app.route('/users/profile', methods=["GET", "POST"])
 def profile():
     """Update profile for current user."""
 
-    # IMPLEMENT THIS
+    if not g.user:
+        flash("Access unauthorized.", "danger")
+        return redirect("/")
+
+    user = g.user
+    form = UserEditForm(obj=user)
+
+    if form.validate_on_submit():
+        user.username = request.form["username"]
+        user.email = request.form["email"]
+        user.image_url = request.form["image_url"]
+        user.header_image_url = request.form["header_image_url"]
+        user.bio = request.form["bio"]
+        password = request.form["password"]
+
+        if User.authenticate(user.username, password):
+            db.session.add(user)
+            db.session.commit()
+            flash("Profile updated.", "success")
+
+            return redirect(f"/users/{g.user.id}")
+        else:
+            flash("Invalid password. Profile not updated", "danger")
+            return redirect(f"/users/{g.user.id}")
+
+    return render_template("users/edit.html", form=form, user=user)
 
 
 @app.route('/users/delete', methods=["POST"])
@@ -292,8 +365,13 @@ def homepage():
     """
 
     if g.user:
+
+        following_ids = [user.id for user in g.user.following]
+        following_ids.append(g.user.id)
+
         messages = (Message
                     .query
+                    .filter(Message.user_id.in_(following_ids))
                     .order_by(Message.timestamp.desc())
                     .limit(100)
                     .all())
@@ -311,7 +389,7 @@ def homepage():
 #
 # https://stackoverflow.com/questions/34066804/disabling-caching-in-flask
 
-@app.after_request
+@ app.after_request
 def add_header(req):
     """Add non-caching headers on every request."""
 
