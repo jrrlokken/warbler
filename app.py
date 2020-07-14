@@ -228,7 +228,6 @@ def add_like(message_id):
             message_id=message_id, user_id=g.user.id).first()
         db.session.delete(like)
         db.session.commit()
-        flash("Unliked.", "info")
 
         return redirect("/")
 
@@ -238,7 +237,6 @@ def add_like(message_id):
 
         db.session.add(like)
         db.session.commit()
-        flash("Liked!", "success")
 
         return redirect("/")
 
