@@ -57,14 +57,56 @@ class UserModelTestCase(TestCase):
         self.assertEqual(len(u.messages), 0)
         self.assertEqual(len(u.followers), 0)
 
-    def test_user_repr(self):
-        """Does the repr method work?"""
+    # def test_user_repr(self):
+    #     """Does the repr method work?"""
 
-        u = User(
-            email="test@test.com",
-            username="testuser",
+    #     u = User(
+    #         email="test@test.com",
+    #         username="testuser",
+    #         password="HASHED_PASSWORD"
+    #     )
+
+    #     db.session.add(u)
+    #     db.session.commit()
+
+    def test_user_following_other(self):
+        """Is one user following another?"""
+
+        u1 = User(
+            email="test1@test.com",
+            username="test1",
             password="HASHED_PASSWORD"
         )
 
-        db.session.add(u)
+        u2 = User(
+            email="test2@test.com",
+            username="test2",
+            password="HASHED_PASSWORD"
+        )
+
+        db.session.add(u1)
+        db.session.add(u2)
         db.session.commit()
+
+        u2.followers.append(u1)
+        self.assertEqual(len(u2.followers), 1)
+
+        # is_following should return 1 for u1=>u2
+        self.assertEqual(User.is_following(u1, u2), 1)
+
+        # is_following should return 0 for u2=>u1
+        self.assertEqual(User.is_following(u2, u1), 0)
+
+        # is_followed_by should return 1 for u2=>u1
+        self.assertEqual(User.is_followed_by(u2, u1), 1)
+
+        # is_following should return 0 for u2=>u1
+        self.assertEqual(User.is_followed_by(u1, u2), 0)
+
+    def test_user_add_credentials(self):
+        """Does User.signup work when given valid credentials?"""
+
+        User.signup(username="testuser",
+                    email="test@test.com", password="password", image_url="")
+        u = User.query.filter_by(username="testuser").all()
+        self.assertEqual(len(u), 1)
