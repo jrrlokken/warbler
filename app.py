@@ -160,7 +160,7 @@ def show_following(user_id):
     """Show list of people this user is following."""
 
     if not g.user:
-        flash("Access unauthorized.", "danger")
+        flash("Unauthorized access.", "danger")
         return redirect("/")
 
     user = User.query.get_or_404(user_id)
@@ -172,7 +172,7 @@ def users_followers(user_id):
     """Show list of followers of this user."""
 
     if not g.user:
-        flash("Access unauthorized.", "danger")
+        flash("Unauthorized access.", "danger")
         return redirect("/")
 
     user = User.query.get_or_404(user_id)
@@ -199,7 +199,7 @@ def stop_following(follow_id):
     """Have currently-logged-in-user stop following this user."""
 
     if not g.user:
-        flash("Access unauthorized.", "danger")
+        flash("Unauthorized access.", "danger")
         return redirect("/")
 
     followed_user = User.query.get(follow_id)
@@ -246,7 +246,7 @@ def users_likes(user_id):
     """Show list of liked warbles for this user."""
 
     if not g.user:
-        flash("Access unauthorized.", "danger")
+        flash("Unauthorized access.", "danger")
         return redirect("/")
 
     user = User.query.get_or_404(user_id)
@@ -258,7 +258,7 @@ def profile():
     """Update profile for current user."""
 
     if not g.user:
-        flash("Access unauthorized.", "danger")
+        flash("Unauthorized access.", "danger")
         return redirect("/")
 
     user = g.user
@@ -290,7 +290,7 @@ def delete_user():
     """Delete user."""
 
     if not g.user:
-        flash("Access unauthorized.", "danger")
+        flash("Unauthorized access.", "danger")
         return redirect("/")
 
     do_logout()
@@ -312,7 +312,7 @@ def messages_add():
     """
 
     if not g.user:
-        flash("Access unauthorized.", "danger")
+        flash("Unauthorized access.", "danger")
         return redirect("/")
 
     form = MessageForm()
@@ -331,7 +331,7 @@ def messages_add():
 def messages_show(message_id):
     """Show a message."""
 
-    msg = Message.query.get(message_id)
+    msg = Message.query.get_or_404(message_id)
     return render_template('messages/show.html', message=msg)
 
 
@@ -340,10 +340,10 @@ def messages_destroy(message_id):
     """Delete a message."""
 
     if not g.user:
-        flash("Access unauthorized.", "danger")
+        flash("Unauthorized access.", "danger")
         return redirect("/")
 
-    msg = Message.query.get(message_id)
+    msg = Message.query.get_or_404(message_id)
     db.session.delete(msg)
     db.session.commit()
 
