@@ -1,34 +1,13 @@
 """Message View tests."""
 
-# run these tests like:
-#
-#    FLASK_ENV=production python -m unittest test_message_views.py
-
-
+from app import app, CURR_USER_KEY
 import os
 from unittest import TestCase
 
 from models import db, connect_db, Message, User
 
-# BEFORE we import our app, let's set an environmental variable
-# to use a different database for tests (we need to do this
-# before we import our app, since that will have already
-# connected to the database
-
 os.environ['DATABASE_URL'] = "postgresql:///warbler-test"
 
-
-# Now we can import app
-
-from app import app, CURR_USER_KEY
-
-# Create our tables (we do this here, so we only create the tables
-# once for all tests --- in each test, we'll delete the data
-# and create fresh new clean test data
-
-db.create_all()
-
-# Don't have WTForms use CSRF at all, since it's a pain to test
 
 app.config['WTF_CSRF_ENABLED'] = False
 
@@ -39,8 +18,8 @@ class MessageViewTestCase(TestCase):
     def setUp(self):
         """Create test client, add sample data."""
 
-        User.query.delete()
-        Message.query.delete()
+        db.drop_all()
+        db.create_all()
 
         self.client = app.test_client()
 
@@ -49,25 +28,99 @@ class MessageViewTestCase(TestCase):
                                     password="testuser",
                                     image_url=None)
 
+        self.testuser_id = 9999
+        self.testuser.id = self.testuser_id
+
         db.session.commit()
 
-    def test_add_message(self):
-        """Can use add a message?"""
+    def tearDown(self):
+        """Clean up after oneself."""
 
-        # Since we need to change the session to mimic logging in,
-        # we need to use the changing-session trick:
+        res = super().tearDown()
+        db.session.rollback()
+        return res
 
-        with self.client as c:
-            with c.session_transaction() as sess:
+    def test_show_message(self):
+        """Message show view."""
+
+        m = Message(
+            id=9998,
+            text="Aragorn!",
+            user_id=self.testuser_id
+        )
+
+        db.session.add(m)
+        db.session.commit()
+
+        with self.client as client:
+            with client.session_transaction() as sess:
                 sess[CURR_USER_KEY] = self.testuser.id
 
-            # Now, that session setting is saved, so we can have
-            # the rest of ours test
+            res = client.get("/messages/9998")
 
-            resp = c.post("/messages/new", data={"text": "Hello"})
+            self.assertEqual(res.status_code, 200)
 
-            # Make sure it redirects
-            self.assertEqual(resp.status_code, 302)
+    def test_add_message(self):
+        """Can a user add a message?"""
+
+        with self.client as client:
+            with client.session_transaction() as sess:
+                sess[CURR_USER_KEY] = self.testuser.id
+
+            res = client.post("/messages/new", data={"text": "Do they, Gandalf?"})
+
+            self.assertEqual(res.status_code, 302)
 
             msg = Message.query.one()
-            self.assertEqual(msg.text, "Hello")
+            self.assertEqual(msg.text, "Do they, Gandalf?")
+
+    def test_show_message_invalid(self):
+        """Message detail view for an invalid message id."""
+
+        with self.client as client:
+            with client.session_transaction() as sess:
+                sess[CURR_USER_KEY] = self.testuser.id
+
+            res = client.get("/messages/12345678")
+
+            self.assertEqual(res.status_code, 404)
+
+    def test_message_delete(self):
+        """Delete message."""
+
+        m = Message(
+            id=9998,
+            text="Aragorn!",
+            user_id=self.testuser_id
+        )
+
+        db.session.add(m)
+        db.session.commit()
+
+        with self.client as client:
+            with client.session_transaction() as sess:
+                sess[CURR_USER_KEY] = self.testuser.id
+
+            res = client.post("/messages/9998/delete", follow_redirects=True)
+
+            self.assertEqual(res.status_code, 200)
+
+    def test_delete_message_noauth(self):
+        """Attempt to delete a message without authorization."""
+
+        m = Message(
+            id=9998,
+            text="Aragorn!",
+            user_id=self.testuser_id
+        )
+
+        db.session.add(m)
+        db.session.commit()
+
+        with self.client as client:
+            res = client.post("/messages/9998/delete", follow_redirects=True)
+            self.assertEqual(res.status_code, 200)
+            self.assertIn("Unauthorized access.", str(res.data))
+
+            m = Message.query.get(9998)
+            self.assertIsNotNone(m)
