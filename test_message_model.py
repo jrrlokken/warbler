@@ -5,12 +5,9 @@ import os
 from unittest import TestCase
 from sqlalchemy.exc import IntegrityError, InvalidRequestError
 
-from models import db, User, Message, Follows
+from models import db, User, Message, Follows, Likes
 
 os.environ['DATABASE_URL'] = "postgresql:///warbler-test"
-
-db.drop_all()
-db.create_all()
 
 
 class MessageModelTestCase(TestCase):
@@ -18,50 +15,63 @@ class MessageModelTestCase(TestCase):
 
     def setUp(self):
         """Create test client, add sample data."""
+        db.drop_all()
+        db.create_all()
 
-        User.query.delete()
-        Message.query.delete()
-        Follows.query.delete()
+        self.uid = 99123
+        u = User.signup("testing", "testing@test.com", "password", None)
+        u.id = self.uid
+        db.session.commit()
+
+        self.u = User.query.get(self.uid)
 
         self.client = app.test_client()
 
     def tearDown(self):
         """Clean up fouled transactions."""
 
+        res = super().tearDown()
         db.session.rollback()
+        return res
 
     def test_message_model(self):
         """Does basic model work?"""
 
-        u = User(
-            email="test@test.com",
-            username="testuser",
-            password="HASHED_PASSWORD"
-        )
-
-        db.session.add(u)
-        db.session.commit()
-
         m = Message(
             text="HOLLA!",
-            user_id=u.id
+            user_id=self.uid
         )
 
         db.session.add(m)
         db.session.commit()
 
         # User should have 1 message
-        self.assertEqual(len(user.messages), 1)
+        self.assertEqual(len(self.u.messages), 1)
+        self.assertEqual(self.u.messages[0].text, "HOLLA!")
 
-    def test_add_message_invalid(self):
-        """Does creating a message fail with invalid params?"""
+    def test_message_likes(self):
 
-        m = Message(
-            text="HOLLA!",
-            user_id=99123
+        m1 = Message(
+            text="HOLLA",
+            user_id=self.uid
         )
 
-        db.session.add(m)
+        m2 = Message(
+            text="ALLOH",
+            user_id=self.uid
+        )
 
-        with self.assertRaises(IntegrityError):
-            db.session.commit()
+        u = User.signup("anothertestuser",
+                        "another@example.com", "password", None)
+        uid = 999
+        u.id = uid
+        db.session.add_all([m1, m2, u])
+        db.session.commit()
+
+        u.likes.append(m1)
+
+        db.session.commit()
+
+        l = Likes.query.filter(Likes.user_id == uid).all()
+        self.assertEqual(len(l), 1)
+        self.assertEqual(l[0].message_id, m1.id)
